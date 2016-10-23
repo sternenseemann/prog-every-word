@@ -70,13 +70,11 @@ fn read_state(p: &Path) -> Option<State<'static>> {
   };
   let mut s = String::new();
 
-  let res = f.read_to_string(&mut s);
-
-  if res.is_err() {
-    return None;
+  match f.read_to_string(&mut s) {
+    Err(_) => None,
+    Ok(_) => deserialize_state(s.as_str())
   }
 
-  deserialize_state(s.as_str())
 }
 
 fn write_state(p: &Path, s: &State) {
@@ -95,30 +93,22 @@ fn write_state(p: &Path, s: &State) {
 fn file_openable(p: &Path) -> bool {
   let file = File::open(p);
 
-  if file.is_err() {
-    return false;
-  } else {
-    return true;
-  }
+  file.is_err()
 }
 
 fn file_lines(p: &Path) -> Option<usize> {
-  let file = File::open(p);
+  match File::open(p) {
+    Err(_) => None,
+    Ok(file) => {
+      let mut f = file;
 
-  if file.is_err() {
-    return None;
+      let mut s = String::new();
+      match f.read_to_string(&mut s) {
+        Err(_) => None,
+        Ok(_) => Some(s.lines().count())
+      }
+    }
   }
-
-  let mut f = file.unwrap();
-
-  let mut s = String::new();
-  let res = f.read_to_string(&mut s);
-
-  if res.is_err() {
-    return None;
-  }
-
-  Some(s.lines().count())
 }
 
 fn next_line(counter: usize, lines: usize) -> usize {
@@ -130,21 +120,17 @@ fn next_line(counter: usize, lines: usize) -> usize {
 }
 
 fn read_word(p: &Path, next: usize) -> Option<String> {
-  let file = File::open(p);
-
-  if file.is_err() {
-    return None;
+  match File::open(p) {
+    Err(_) => None,
+    Ok(file) => {
+      let mut f = file;
+      let mut s = String::new();
+      match f.read_to_string(&mut s) {
+        Err(_) => None,
+        Ok(_) => s.lines().nth(next).map(|s| String::from(s))
+      }
+    }
   }
-
-  let mut f = file.unwrap();
-  let mut s = String::new();
-  let res = f.read_to_string(&mut s);
-
-  if res.is_err() {
-    return None;
-  }
-
-  s.lines().nth(next).map(|s| String::from(s))
 }
 
 fn get_access_token(con: &Token) -> Option<Token<'static>> {
@@ -157,11 +143,10 @@ fn get_access_token(con: &Token) -> Option<Token<'static>> {
 
   let mut pin = String::new();
 
-  if std::io::stdin().read_line(&mut pin).is_err() {
-    return None;
+  match std::io::stdin().read_line(&mut pin) {
+    Err(_) => None,
+    Ok(_) => egg_mode::access_token(con, &request_token, pin).ok().map(|t| t.0)
   }
-
-  egg_mode::access_token(con, &request_token, pin).ok().map(|t| t.0)
 }
 
 fn main() {
