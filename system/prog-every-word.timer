@@ -1,0 +1,11 @@
+[Unit]
+Description=Automatic timer for tweeting a new programming paradigm
+After=network.target
+
+[Timer]
+Unit=prog-every-word.service
+OnActiveSec=0
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=multi-user.target
