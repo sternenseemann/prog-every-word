@@ -1,0 +1,7 @@
+[package]
+name = "word-oriented-programming"
+version = "0.1.0"
+authors = ["sternenseemann <git@lukasepple.de>"]
+
+[dependencies]
+egg-mode = "*"
