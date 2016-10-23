@@ -180,6 +180,8 @@ fn main() {
   next_tweet.push_str(next_word.as_str());
   next_tweet.push_str(" oriented programming");
 
+  assert!(counter + 1 <= word_count);
+
   let draft = DraftTweet::new(next_tweet.as_str());
   draft.send(&consumer_token, &access_token).unwrap();
 
