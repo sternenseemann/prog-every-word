@@ -1,8 +1,6 @@
 extern crate egg_mode;
 use egg_mode::tweet::DraftTweet;
 use egg_mode::Token;
-use std::option;
-use std::io;
 use std::io::prelude::*;
 use std::fs::File;
 use std::path::Path;
@@ -11,7 +9,7 @@ use std::str::FromStr;
 use std::usize;
 
 // a beautiful mersenne prime
-const prime: usize = 2147483647;
+const PRIME: usize = 2147483647;
 
 fn read_token(p: &Path) -> Option<Token<'static>> {
     let file = File::open(p);
@@ -64,7 +62,11 @@ fn read_counter(p: &Path) -> Option<usize> {
 fn write_counter(p: &Path, counter: usize) {
   let mut file = File::create(p).unwrap();
 
-  file.write_fmt(format_args!("{}", counter));
+  let res = file.write_fmt(format_args!("{}", counter));
+
+  if res.is_err() {
+    panic!("Could not write file: {}", res.err().unwrap().to_string());
+  }
 }
 
 fn file_lines(p: &Path) -> Option<usize> {
@@ -89,9 +91,9 @@ fn file_lines(p: &Path) -> Option<usize> {
 fn next_line(counter: usize, lines: usize) -> usize {
   let limit = lines - 1;
   assert!(limit > 0);
-  assert!(limit % prime != 0);
+  assert!(limit % PRIME != 0);
 
-  (counter * prime) % limit
+  (counter * PRIME) % limit
 }
 
 fn read_word(p: &Path, next: usize) -> Option<String> {
@@ -114,7 +116,7 @@ fn read_word(p: &Path, next: usize) -> Option<String> {
 
 fn get_access_token(con: &Token) -> Option<Token<'static>> {
   let request_token = match egg_mode::request_token(con, "oob") {
-    Err(e) => return None,
+    Err(_) => return None,
     Ok(r) => r
   };
 
@@ -131,14 +133,18 @@ fn get_access_token(con: &Token) -> Option<Token<'static>> {
 }
 
 fn write_token(p: &Path, t: &Token) {
-  let mut file = File::create(p);
+  let file = File::create(p);
   if file.is_err() {
     return;
   }
 
   let mut f = file.unwrap();
 
-  f.write_fmt(format_args!("{}\n{}", t.key, t.secret));
+  let res = f.write_fmt(format_args!("{}\n{}", t.key, t.secret));
+
+  if res.is_err() {
+    panic!("Could not write file: {}", res.err().unwrap().to_string());
+  }
 
 }
 
@@ -160,14 +166,18 @@ fn main() {
     }
   };
 
-  let counter        = match read_counter(state_file) {
+  let counter = match read_counter(state_file) {
     Some(i) => i,
     None => {
       let f = File::create(state_file);
       if f.is_err() {
         panic!("Could not create state file \"{}\"", state_file.to_str().unwrap());
       }
-      f.unwrap().write_fmt(format_args!("0"));
+      let res = f.unwrap().write_fmt(format_args!("0"));
+
+      if res.is_err() {
+        panic!("Could not write file: {}", res.err().unwrap().to_string());
+      }
       read_counter(state_file).unwrap()
     }
   };
