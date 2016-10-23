@@ -1,0 +1,13 @@
+[Unit]
+Description=Invent new programming paradigms
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/twitter/.cargo/bin/prog-every-word
+WorkingDirectory=/home/twitter/prog-every-word
+User=twitter
+Group=users
+
+[Install]
+WantedBy=multi-user.target
