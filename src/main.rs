@@ -93,7 +93,7 @@ fn write_state(p: &Path, s: &State) {
 fn file_openable(p: &Path) -> bool {
   let file = File::open(p);
 
-  file.is_err()
+  file.is_ok()
 }
 
 fn file_lines(p: &Path) -> Option<usize> {
