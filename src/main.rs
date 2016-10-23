@@ -1,71 +1,104 @@
 extern crate egg_mode;
+#[macro_use(object)] extern crate json;
 use egg_mode::tweet::DraftTweet;
 use egg_mode::Token;
 use std::io::prelude::*;
 use std::fs::File;
 use std::path::Path;
 use std::string::String;
-use std::str::FromStr;
 use std::usize;
+use json::JsonValue;
+use std::borrow::Borrow;
 
 // a beautiful mersenne prime
 const PRIME: usize = 2147483647;
 
-fn read_token(p: &Path) -> Option<Token<'static>> {
-    let file = File::open(p);
-
-    if file.is_err() {
-      return None;
-    }
-
-    let mut f = file.unwrap();
-
-    let mut s = String::new();
-    let res = f.read_to_string(&mut s);
-
-    if res.is_err() {
-      return None;
-    }
-
-    let mut lines = s.lines();
-    let key = lines.next();
-    let secret = lines.next();
-
-    if key.is_none() || secret.is_none() {
-      return None;
-    }
-
-    Some(Token::new(key.unwrap().to_string(), secret.unwrap().to_string()))
+struct State<'a> {
+  consumer_token: Option<Token<'a>>,
+  access_token:   Option<Token<'a>>,
+  counter:        usize,
 }
 
-fn read_counter(p: &Path) -> Option<usize> {
-  let file = File::open(p);
+fn serialize_token(t: &Token) -> JsonValue {
+  object!{
+      "key" => t.key.as_ref().borrow(),
+      "secret" => t.secret.as_ref().borrow()
+    }
+}
 
-  if file.is_err() {
+fn serialize_state(s: &State) -> JsonValue {
+  object!{
+    "consumer_token" => JsonValue::from(s.consumer_token.as_ref().map(|t| serialize_token(&t))),
+    "access_token" => JsonValue::from(s.access_token.as_ref().map(|t| serialize_token(&t))),
+    "counter" => s.counter
+  }
+}
+
+fn json_value_to_token(j: &JsonValue) -> Option<Token<'static>> {
+  let key = j["key"].as_str().map(|s| s.to_string());
+  let secret = j["secret"].as_str().map(|s| s.to_string());
+
+  if key.is_none() || secret.is_none() {
     return None;
   }
 
-  let mut f = file.unwrap();
+  Some(Token::new(key.unwrap(), secret.unwrap()))
+}
 
+fn deserialize_state(s: &str) -> Option<State<'static>> {
+  let parsed = match json::parse(s) {
+    Ok(p) => p,
+    Err(_) => return None
+  };
+
+  let state = State {
+    consumer_token: json_value_to_token(&parsed["consumer_token"]),
+    access_token:   json_value_to_token(&parsed["access_token"]),
+    counter:        match parsed["counter"].as_number() {
+      None => return None,
+      Some(c) => c.into()
+    }
+  };
+
+  Some(state)
+}
+
+fn read_state(p: &Path) -> Option<State<'static>> {
+  let mut f = match File::open(p) {
+    Ok(f) => f,
+    Err(_) => return None
+  };
   let mut s = String::new();
+
   let res = f.read_to_string(&mut s);
 
   if res.is_err() {
     return None;
   }
 
-  let number = usize::from_str(s.as_str());
-
-  number.ok()
+  deserialize_state(s.as_str())
 }
 
-fn write_counter(p: &Path, counter: usize) {
-  let mut file = File::create(p).unwrap();
+fn write_state(p: &Path, s: &State) {
+  let mut f = match File::create(p) {
+    Ok(f) => f,
+    Err(e) => panic!("Could not create file: {}", e.to_string())
+  };
 
-  let res = file.write_fmt(format_args!("{}", counter));
+  let res = f.write_fmt(format_args!("{}", serialize_state(s)));
 
   if res.is_err() {
     panic!("Could not write file: {}", res.err().unwrap().to_string());
+  }
+}
+
+fn file_openable(p: &Path) -> bool {
+  let file = File::open(p);
+
+  if file.is_err() {
+    return false;
+  } else {
+    return true;
   }
 }
 
@@ -129,76 +162,60 @@ fn get_access_token(con: &Token) -> Option<Token<'static>> {
   }
 
   egg_mode::access_token(con, &request_token, pin).ok().map(|t| t.0)
-
-}
-
-fn write_token(p: &Path, t: &Token) {
-  let file = File::create(p);
-  if file.is_err() {
-    return;
-  }
-
-  let mut f = file.unwrap();
-
-  let res = f.write_fmt(format_args!("{}\n{}", t.key, t.secret));
-
-  if res.is_err() {
-    panic!("Could not write file: {}", res.err().unwrap().to_string());
-  }
-
 }
 
 fn main() {
-  let consumer_token_file = Path::new("./state/consumer_token");
-  let access_token_file   = Path::new("./state/access_token");
-  let state_file          = Path::new("./state/counter");
-  let word_list_file      = Path::new("./state/nouns");
+  let state_file     = Path::new("./state.json");
+  let word_list_file = Path::new("./nouns");
 
-  let consumer_token = read_token(consumer_token_file).unwrap();
-  let access_token   = match read_token(access_token_file) {
-    Some(t) => t,
-    None => {
-      let acc_token = get_access_token(&consumer_token).unwrap();
+  if !file_openable(word_list_file) {
+    panic!("Need word list file at {}", word_list_file.to_str().unwrap());
+  }
 
-      write_token(access_token_file, &acc_token);
+  if !file_openable(state_file) {
+    write_state(&state_file, &State {
+      consumer_token : None,
+      access_token : None,
+      counter : 0
+    });
+    println!("Please enter your application's consumer key and secret into {}", state_file.to_str().unwrap());
+    return;
+  }
 
-      acc_token
-    }
-  };
-
-  let counter = match read_counter(state_file) {
-    Some(i) => i,
-    None => {
-      let f = File::create(state_file);
-      if f.is_err() {
-        panic!("Could not create state file \"{}\"", state_file.to_str().unwrap());
-      }
-      let res = f.unwrap().write_fmt(format_args!("0"));
-
-      if res.is_err() {
-        panic!("Could not write file: {}", res.err().unwrap().to_string());
-      }
-      read_counter(state_file).unwrap()
-    }
-  };
   let word_count = file_lines(word_list_file).unwrap();
+  let mut state  = read_state(&state_file).unwrap();
 
-  let next_line = next_line(counter, word_count);
+  if state.consumer_token.is_none() {
+    panic!("No consumer token in {}!", state_file.to_str().unwrap());
+  }
+
+  if state.access_token.is_none() {
+    state.access_token = get_access_token(state.consumer_token.as_ref().unwrap());
+
+    if state.access_token.is_none() {
+      panic!("Could not get access token!");
+    }
+
+  }
+
+  let next_line = next_line(state.counter, word_count);
   let next_word = read_word(word_list_file, next_line).unwrap();
   let mut next_tweet = String::new();
 
   next_tweet.push_str(next_word.as_str());
   next_tweet.push_str(" oriented programming");
 
-  assert!(counter + 1 <= word_count);
+  assert!(state.counter + 1 <= word_count);
 
   let draft = DraftTweet::new(next_tweet.as_str());
-  draft.send(&consumer_token, &access_token).unwrap();
+  draft.send(state.consumer_token.as_ref().unwrap(), state.access_token.as_ref().unwrap()).unwrap();
 
   println!("Count of nouns: {}
 Counter:         {}
 Used Line:       {}
-Tweet text:      {}", word_count, counter, next_line, draft.text);
+Tweet text:      {}", word_count, state.counter, next_line, draft.text);
 
-  write_counter(state_file, counter + 1);
+  state.counter += 1;
+
+  write_state(state_file, &state);
 }

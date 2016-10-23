@@ -5,3 +5,4 @@ authors = ["sternenseemann <git@lukasepple.de>"]
 
 [dependencies]
 egg-mode = "*"
+json = "*"
